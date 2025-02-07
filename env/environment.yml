@@ -1,0 +1,15 @@
+name: findphasi
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - biopython
+  - r
+  - samtools
+  - bioconda::bowtie
+  - trimmomatic
+  - conda-forge::r-ggplot2
+  - conda-forge::r-plyr
+  - conda-forge::r-gridextra
+  - bedtools
