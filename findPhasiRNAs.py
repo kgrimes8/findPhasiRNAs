@@ -115,7 +115,7 @@ def trimAdapters(options):
     """
     input_filename=options.input_library
     output_filename=options.adapter_trimmed_filename
-    cmd="java -jar lib/trimmomatic/trimmomatic-0.38.jar SE -threads "+str(options.CPU)+" "+input_filename
+    cmd="trimmomatic SE -threads "+str(options.CPU)+" "+input_filename
     cmd+=" "+output_filename
     cmd+=" ILLUMINACLIP:Other/adapters.fasta:2:30:10 "
     os.system(cmd)
@@ -156,7 +156,7 @@ def mapSmallRNAReadsToGenomeUsingBowtie1(options):
     """
     # Generate the bowtie index if one is not provided
     if options.bowtie_index==None:
-        cmd="lib/bowtie/bowtie-build"
+        cmd="bowtie-build"
         cmd+=" --threads "+options.CPU+" "
         cmd+=options.genome+" "
         cmd+=options.output_directory+"/bowtie1_index"
@@ -170,7 +170,7 @@ def mapSmallRNAReadsToGenomeUsingBowtie1(options):
     else:
         large_index=1
     
-    cmd="lib/bowtie/bowtie "
+    cmd="bowtie "
     if large_index==1:
         cmd+=" --large-index "
     cmd+=" -f -m "
@@ -519,25 +519,40 @@ def main():
     if len(commandLineArg)==1:
         print("Please use the --help option to get usage information")
     options=parseCommandLineArguments()
+    print("args parsed")
     options=analyzeCommandLineArguments(options)
-    
+    print("args analysed")
+
     trimAdapters(options)
+    print("adapters trimmed")
+
     condolidateReads(options)
+    print("consolidated reads")
+
     mapSmallRNAReadsToGenomeUsingBowtie1(options)
+    print("mapped reads using ")
+
     for phase in options.small_rna_size:
+        print(phase)
         whole_mapped_data,mapped_data_per_size_per_register=readMappedData(options,phase)
+        print("mapped data read")
         for cycle in options.number_of_cycles:
             options.output_directory_per_run=options.output_directory+"/"+"phase_"+str(phase)+"_cycle_"+str(cycle)
             cmd="mkdir "+ options.output_directory_per_run
             os.system(cmd)
             siftRegionsOfInterest(options,mapped_data_per_size_per_register,phase,cycle)
+            print("sifted")
             computePValues(options,whole_mapped_data,mapped_data_per_size_per_register,phase,cycle)
+            print("pvalues computed")
             generatePositivePHASLoci(options,whole_mapped_data,phase,cycle)
+            print("generated positive loci")
             generatePhasingScore(options,phase,cycle)
+            print("generate phasing score")
             cmd="Rscript --vanilla plot.R "
             cmd+=" "+options.output_directory_per_run
             cmd+=" "+str(phase)
             cmd+=" "+str(cycle)
+            print("done system prompts")
             os.system(cmd)
             if options.clean_up!=0:
                 cleanUpTemporaryFiles(options)
