@@ -117,12 +117,12 @@ def trimAdapters(options):
     output_filename=options.adapter_trimmed_filename
     cmd="trimmomatic SE -threads "+str(options.CPU)+" "+input_filename
     cmd+=" "+output_filename
-    cmd+=" ILLUMINACLIP:Other/adapters.fasta:2:30:10 "
+    cmd+=" ILLUMINACLIP:resources/adapters.fasta:2:30:10 "
     os.system(cmd)
     cmd="sed -n '1~4s/^@/>/p;2~4p' "+options.adapter_trimmed_filename+" > "+options.output_directory+"/"+options.input_library.split("/")[-1].split(".")[0]+".fa"
     os.system(cmd)
 
-def condolidateReads(options):
+def consolidateReads(options):
     """
     Select unique reads and combine their counts. Eliminates the quality values.
     """
@@ -526,7 +526,7 @@ def main():
     trimAdapters(options)
     print("adapters trimmed")
 
-    condolidateReads(options)
+    consolidateReads(options)
     print("consolidated reads")
 
     mapSmallRNAReadsToGenomeUsingBowtie1(options)
