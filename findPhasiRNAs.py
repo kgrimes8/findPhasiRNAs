@@ -13,6 +13,7 @@ import os
 import math
 from Bio.Seq import Seq
 
+
 def parseCommandLineArguments():
     """
     Parses the arguments provided through command line.
@@ -26,14 +27,15 @@ def parseCommandLineArguments():
     required_arg.add_argument("--input_library","-i",help="Specify the name of the file which has the small-RNA reads. This option is mutually exclusive with --consolidated_library")
     genome_mutex.add_argument("--genome","-g",help="Specify the name of the genome fasta file of the organism. Please note that the program will not be able to handle multiple fasta files. ")
     genome_mutex.add_argument("--bowtie_index","-bindex",help="Provide the bowtie index. This argument is optional. If no index is provided then the software will generate one.")
-    required_arg.add_argument("--output_directory","-out",help="Specify an output directory to which all the generated files will be housed. This includes the log file which can be later checked. Please make sure that there are sufficient permissions to create the output directory. The program will throw an error if creation of the output directory fails. If the directory already exists then its contents will be overwritten without warning. This directory will contain the summary file containing the details of the execution",required=True)
+    required_arg.add_argument("--output_directory","-out",type=lambda x: "results/" + x, help="Specify an output directory to which all the generated files will be housed. This includes the log file which can be later checked. Please make sure that there are sufficient permissions to create the output directory. The program will throw an error if creation of the output directory fails. If the directory already exists then its contents will be overwritten without warning. This directory will contain the summary file containing the details of the execution",required=True)
+    optional_arg.add_argument("--regions_file", "-r", help="Optional GFF file to filter results to only corresponding regions that have some overlap.")
     optional_arg.add_argument("--small_rna_size","-srnasize",nargs="+",help="Specify the size of the small RNA that you wish to analyze. You can enter more than one possible size.",default=["21"])
     optional_arg.add_argument("--number_of_cycles","-numcycles",nargs="+",help="Specify the number of cycles you wish to analyze with. You can enter multiple number of number of cycles. The accepted values are 9, 10, 11, 12 and 13",default=["9"])
     optional_arg.add_argument("--pvalue_cutoff","-p",help="Enter the p-value cut off",default=0.05)
     optional_arg.add_argument("--clean_up","-c",help="Set this to 1 if you wish to clean up all the intermediate files. The program will keep all temporary files by default.",default=0)
     optional_arg.add_argument("--CPU","-n",help="Provide the number of CPUs to be used. Default is 1.",default="1")
     optional_arg.add_argument("--map_limit","-mapl",help="Specify the mapping limit. Only reads which are mapped at most -mapl times will be considered. The default is 1. The maximum number of alignments allowed for a single read is 10. ",default=1)
-    optional_arg.add_argument("--force","-f",help="Overwrite contents of output directory if it exists.",default=0)
+    optional_arg.add_argument("--force",help="Overwrite contents of output directory if it exists.",default=0)
        
     # Supressed arguments
     parser.add_argument("--input_filename","-ifname",help=argparse.SUPPRESS)
@@ -45,6 +47,7 @@ def parseCommandLineArguments():
     
     return parser.parse_args()
     
+
 def analyzeCommandLineArguments(options):
     """
     Performs checks on the validity of the arguments provided 
@@ -53,7 +56,7 @@ def analyzeCommandLineArguments(options):
     print(options)
     flag=0
     if os.path.exists(options.output_directory)==False:
-        cmd="mkdir "+options.output_directory
+        cmd="mkdir -p "+options.output_directory
         os.system(cmd)
     else:
         if options.force==0:
@@ -62,28 +65,37 @@ def analyzeCommandLineArguments(options):
         else:
             cmd="rm -rf "+options.output_directory
             os.system(cmd)
-            cmd="mkdir "+options.output_directory
+            cmd="mkdir -p "+options.output_directory
             os.system(cmd)
         
     cmd="touch "+options.output_directory+"/Log.out"
     os.system(cmd)
+
     if options.bowtie_index == None:
         os.system("echo \"No bowtie index provided. Proceeding to building index\" >> "+options.output_directory+"/Log.out")
         if os.path.exists(options.genome)==False:
             os.system("echo \"The genome file you provided does not exist\" >> "+options.output_directory+"/Log.out")
             flag=1
-    if options.input_library==None:
+
+    if options.input_library == None:
         os.system("echo \"The input file "+options.input_library+" does not exist\" >> "+options.output_directory+"/Log.out")
         flag=1
-        
-    if flag==1:
-        print("The program had to terminate prematurely....Please check "+options.output_directory+"/Log.out file for more details")
-        sys.exit()
+
+    if options.regions_file:
+        if os.path.exists(options.regions_file)==False:
+            os.system("echo \"The input file "+options.regions+" does not exist\" >> "+options.output_directory+"/Log.out")
+            flag=1
+
     for ele in options.number_of_cycles:
         if ele not in ["9","10","11","12","13"]:
             os.system("echo \"Incorrect number of cycles have been entered. Valid choices are 9, 10, 11, 12 and 13 \" >> "+options.output_directory+"/Log.out")
             flag=1
     
+    # throw error and exit if any safeties are not satisfied    
+    if flag==1:
+        print("The program had to terminate prematurely....Please check "+options.output_directory+"/Log.out file for more details")
+        sys.exit()
+
     if options.input_library.split(".")[-1]=="fq" or options.input_library.split(".")[-1]=="fastq":
         options.input_filename=options.output_directory+"/"+options.input_library.split("/")[-1].split(".")[0]+".fa"
     
@@ -98,6 +110,7 @@ def analyzeCommandLineArguments(options):
     options.map_limit=int(options.map_limit)
     return options
 
+
 def readFastqFile(filename):
     reads={}
     fhr=open(filename,"r")
@@ -108,6 +121,7 @@ def readFastqFile(filename):
         reads[line.split()[0][1:]]=[fhr.readline().strip(),fhr.readline().strip(),fhr.readline().strip()]
         #print(reads[line.split()[0]])
     return reads
+
 
 def trimAdapters(options):
     """
@@ -121,6 +135,7 @@ def trimAdapters(options):
     os.system(cmd)
     cmd="sed -n '1~4s/^@/>/p;2~4p' "+options.adapter_trimmed_filename+" > "+options.output_directory+"/"+options.input_library.split("/")[-1].split(".")[0]+".fa"
     os.system(cmd)
+
 
 def consolidateReads(options):
     """
@@ -148,6 +163,7 @@ def consolidateReads(options):
         fhw.write(">read_"+str(seq_num+1)+"_"+str(data[seq])+"\n"+seq+"\n")
     fhw.close()
     
+
 def mapSmallRNAReadsToGenomeUsingBowtie1(options):
     """
     This function maps the reads to the genome.
@@ -181,6 +197,7 @@ def mapSmallRNAReadsToGenomeUsingBowtie1(options):
     cmd+=" "+options.output_directory+"/"+options.input_filename+"_bowtie1.bwt "
     cmd+=" 2> "+options.output_directory+"/"+options.input_filename+"_bowtie1.alignment "
     os.system(cmd)
+
 
 def readMappedData(options,phase):
     """
@@ -226,13 +243,14 @@ def readMappedData(options,phase):
                 
     return whole_mapped_data,mapped_data_per_size_per_register
 
+
 def siftRegionsOfInterest(options,mapped_data_per_size_per_register,phase,cycle):
     """
     This function will look through the mappings and sift regions of the chromosomes which are of interest to us
     """
     for chromosome in sorted(mapped_data_per_size_per_register):
         # Make separate files for each chromosome
-        output_filename=options.output_directory_per_run+"/"+options.input_filename+"_"+str(phase)+"_"+str(cycle)+"_"+chromosome+".regionsOfInterest"
+        output_filename=options.output_directory_per_run+"/"+options.input_filename+"_"+str(phase)+"_"+str(cycle)+"_"+chromosome+".regionsOfInterest.full"
         fhw=open(output_filename,"w")
         for register in sorted(mapped_data_per_size_per_register[chromosome]):
             start,end=0,0
@@ -255,10 +273,87 @@ def siftRegionsOfInterest(options,mapped_data_per_size_per_register,phase,cycle)
                 fhw.write(str(register)+"\t"+str(start)+"\t"+str(end+phase-1)+"\n")
         fhw.close()
 
+
+def parseGFF(gff_path):
+    # read gff to dict chr1: [{start: 1, end: 123, strand: +}, {start: 234, end: 345, strand: -}]
+    with open(gff_path, "rt") as infile:
+        lines = infile.read().split("\n")
+        gff_dict = {}
+
+    for line in lines:
+        if line != "" and not line.startswith("#"):
+            chr = line.split("\t")[0]
+            start = line.split("\t")[3]
+            end = line.split("\t")[4]
+            strand = line.split("\t")[6]
+            if chr not in gff_dict.keys():
+                gff_dict[chr]=[
+                    {"start": start,
+                    "end": end,
+                    "strand": strand}
+                ]
+            else:
+                gff_dict[chr].append(
+                    {"start": start,
+                    "end": end,
+                    "strand": strand}
+                    )
+    return gff_dict
+
+
+def filterByRegion(options, mapped_data_per_size_per_register, phase, cycle):
+    if options.regions_file:
+        print(f"Regions file GFF option provided: {options.regions_file}")
+        gff_data = parseGFF(options.regions_file)
+        fail_count = 0
+        # filter files based off chromosome
+        for chromosome in sorted(mapped_data_per_size_per_register):
+            if chromosome in gff_data.keys():
+                output_filename=options.output_directory_per_run+"/"+options.input_filename+"_"+str(phase)+"_"+str(cycle)+"_"+chromosome+".regionsOfInterest"
+                input_filename=f"{output_filename}.full"
+
+                # find if any data is within regions of interest and keep it
+                data = []
+                with open(input_filename, "r") as input:
+                    for line in input:
+                        line_data = line.strip("\n").split("\t")
+                        for region in gff_data[chromosome]:
+                            # gff start is before ROI end, and gff end is after ROI start
+                            if region["start"] <= line_data[2] and region["end"] >= line_data[1]:
+                                data.append(line)    
+
+                if data:
+                    # write data to new file ROI
+                    with open(output_filename, "w") as file:
+                        for line in data:
+                            file.write(line)
+                else:
+                    print(f"Chromosome {chromosome} has no regions which made it through the filtering.")
+                    fail_count += 1
+            
+            else:
+                # add to fail count
+                print(f"Chromosome {chromosome} not in regions file and has been filtered out.")
+                fail_count += 1
+
+        if fail_count == len(mapped_data_per_size_per_register):
+            # capture for if filtering removes all regions
+            print("No regions survived filtering based on gff regions inputted.")
+            print("The program had to terminate prematurely....Please check "+options.output_directory+"/Log.out file for more details")
+            sys.exit()
+
+    else:
+        # rename/copy files from roi.full to roi if filtering not needed
+        for chromosome in sorted(mapped_data_per_size_per_register):
+            filename=options.output_directory_per_run+"/"+options.input_filename+"_"+str(phase)+"_"+str(cycle)+"_"+chromosome+".regionsOfInterest"
+            os.rename(f"{filename}.full", filename)
+
+
 def nCr(n,r):
     if (n-r)<0 or n<1 or r<1:
         return 1
     return math.factorial(n)/(math.factorial(r)*math.factorial(n-r))
+
 
 def computePValues(options,whole_mapped_data,mapped_data_per_size_per_register,phase,cycle):
     """
@@ -336,6 +431,7 @@ def computePValues(options,whole_mapped_data,mapped_data_per_size_per_register,p
                 sys.stdout.flush()
                 begin+=phase
 
+
 def generatePositivePHASLoci(options,whole_mapped_data,phase,cycle):
     """
     Generate a file with the set of positive loci on all the chromosomes
@@ -371,6 +467,7 @@ def generatePositivePHASLoci(options,whole_mapped_data,phase,cycle):
         fhw.write(chromosome+"\t"+str(window_start)+"\t"+str(window_end)+"\n")
     fhw.close()
     
+
 def readFastaFile(filename):
     """
     Reads in a fasta file and returns a dictionary
@@ -389,6 +486,7 @@ def readFastaFile(filename):
                 pass
     return info
 
+
 def readDataForPhasingScoreComputation(options,phase):
     """
     Read in data from the orginal fasta file for phasing score computation
@@ -403,7 +501,8 @@ def readDataForPhasingScoreComputation(options,phase):
         coordinate=int(coordinate)
         mapped_times=int(mapped_times)+1
         length=len(alignment)
-        if length!=phase:continue
+        if length!=phase:
+            continue
         if strand=='-':
             coordinate+=2
             seq=str(Seq(alignment).reverse_complement())
@@ -433,8 +532,10 @@ def readDataForPhasingScoreComputation(options,phase):
             readseq[chromosome][coordinate]={}
         if strand not in readseq[chromosome][coordinate]:
             readseq[chromosome][coordinate][strand]=seq
+            
     return score,readcount,readseq
         
+
 def generatePhasingScore(options,phase,cycle):
     """
     Generates phasing scores for the phased loci
@@ -504,6 +605,7 @@ def generatePhasingScore(options,phase,cycle):
         #out4.write(chromosome+"\t"+str(ss)+"\t"+str(ee)+"\t"+str(phas_score)+"\n")
     out4.close()   
             
+
 def cleanUpTemporaryFiles(options):
     """
     Performs cleanup of the directory and keeps only the files that are required.
@@ -513,6 +615,7 @@ def cleanUpTemporaryFiles(options):
     os.system("rm "+options.output_directory_per_run+"/*regionsOfInterest*")
     os.system("mv "+options.output_directory_per_run+"/* "+options.output_directory_per_run+"/../")
     os.system("rm -rf "+options.output_directory_per_run)
+
 
 def main():
     commandLineArg=sys.argv
@@ -533,30 +636,41 @@ def main():
     print("mapped reads using ")
 
     for phase in options.small_rna_size:
-        print(phase)
+
         whole_mapped_data,mapped_data_per_size_per_register=readMappedData(options,phase)
         print("mapped data read")
+
         for cycle in options.number_of_cycles:
             options.output_directory_per_run=options.output_directory+"/"+"phase_"+str(phase)+"_cycle_"+str(cycle)
             cmd="mkdir "+ options.output_directory_per_run
             os.system(cmd)
+
             siftRegionsOfInterest(options,mapped_data_per_size_per_register,phase,cycle)
             print("sifted")
+
+            filterByRegion(options,mapped_data_per_size_per_register, phase, cycle)
+            print("filtered")
+
             computePValues(options,whole_mapped_data,mapped_data_per_size_per_register,phase,cycle)
             print("pvalues computed")
+
             generatePositivePHASLoci(options,whole_mapped_data,phase,cycle)
             print("generated positive loci")
+
             generatePhasingScore(options,phase,cycle)
             print("generate phasing score")
+
             cmd="Rscript --vanilla plot.R "
             cmd+=" "+options.output_directory_per_run
             cmd+=" "+str(phase)
             cmd+=" "+str(cycle)
-            print("done system prompts")
             os.system(cmd)
+            print("done Rscript")
+
             if options.clean_up!=0:
                 cleanUpTemporaryFiles(options)
     
+
 if __name__ == "__main__":
     main()
     
