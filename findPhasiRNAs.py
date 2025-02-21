@@ -1,6 +1,6 @@
 #######################################################################################################
-# Developed by: Sagnik Banerjee
-# Version: 1.0
+# Developed by: Sagnik Banerjee, Kalon Grimes
+# Version: 1.1
 # 
 # This program will analyze locations of phasiRNAs. Please
 # launch python findPhasiRNAs.py --help for more details of each possible functionality
@@ -8,10 +8,34 @@
 #######################################################################################################
 
 import argparse
+import logging
 import sys
 import os
 import math
 from Bio.Seq import Seq
+from datetime import datetime
+
+def create_logs():
+    # make log dir
+    try:
+        os.mkdir("logs")
+    except:
+        pass
+
+    timenow = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_filepath = f"logs/{timenow}_findphasi.log"
+
+    # initiate logging
+    logging.basicConfig(
+        filename=log_filepath,
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        datefmt="%d-%b-%y %H:%M:%S",
+    )
+
+    logging.info("Logging initiated.")
+    print(f"Logging initiated: {log_filepath}")
+
 
 
 def parseCommandLineArguments():
@@ -43,7 +67,6 @@ def parseCommandLineArguments():
     parser.add_argument("--consolidated_filename","-cfname",help=argparse.SUPPRESS)
     parser.add_argument("--adapter_trimmed_filename","-atfname",help=argparse.SUPPRESS)
     parser.add_argument("--output_directory_per_run","-output_directory_per_run",help=argparse.SUPPRESS)
-    #parser.add_argument("--output_directory","-actual_out",help=argparse.SUPPRESS)
     
     return parser.parse_args()
     
@@ -53,14 +76,13 @@ def analyzeCommandLineArguments(options):
     Performs checks on the validity of the arguments provided 
     through the command line.
     """
-    print(options)
     flag=0
     if os.path.exists(options.output_directory)==False:
         cmd="mkdir -p "+options.output_directory
         os.system(cmd)
     else:
         if options.force==0:
-            os.system("echo \"Output directory already exists. Please re-run the program with -f 1 to enforce rewrite of the directory \" >> "+options.output_directory+"/Log.out")
+            logging.error("Output directory '%s' already exists. Please re-run the program with -f 1 to force rewrite of the directory", options.output_directory)
             flag=1
         else:
             cmd="rm -rf "+options.output_directory
@@ -72,28 +94,29 @@ def analyzeCommandLineArguments(options):
     os.system(cmd)
 
     if options.bowtie_index == None:
-        os.system("echo \"No bowtie index provided. Proceeding to building index\" >> "+options.output_directory+"/Log.out")
-        if os.path.exists(options.genome)==False:
-            os.system("echo \"The genome file you provided does not exist\" >> "+options.output_directory+"/Log.out")
+        logging.warning("No bowtie index provided. Proceeding to building index...")
+        if not os.path.exists(options.genome):
+            logging.error("The genome file '%s' does not exist.", options.genome)
             flag=1
 
     if options.input_library == None:
-        os.system("echo \"The input file "+options.input_library+" does not exist\" >> "+options.output_directory+"/Log.out")
+        logging.error("The input file '%s' does not exist", options.input_library)
         flag=1
 
     if options.regions_file:
         if os.path.exists(options.regions_file)==False:
-            os.system("echo \"The input file "+options.regions+" does not exist\" >> "+options.output_directory+"/Log.out")
+            logging.error("The input file '%s' does not exist", options.regions_file)
             flag=1
 
     for ele in options.number_of_cycles:
         if ele not in ["9","10","11","12","13"]:
-            os.system("echo \"Incorrect number of cycles have been entered. Valid choices are 9, 10, 11, 12 and 13 \" >> "+options.output_directory+"/Log.out")
+            logging.error("'%s' is not a valid choice of cycle. Valid choices are 9, 10, 11, 12 and 13.", ele)
             flag=1
     
     # throw error and exit if any safeties are not satisfied    
     if flag==1:
-        print("The program had to terminate prematurely....Please check "+options.output_directory+"/Log.out file for more details")
+        logging.info("The script terminated due to errors.")
+        print("The script had to terminate prematurely. Please check log file for more details.")
         sys.exit()
 
     if options.input_library.split(".")[-1]=="fq" or options.input_library.split(".")[-1]=="fastq":
@@ -119,7 +142,6 @@ def readFastqFile(filename):
         if not line:
             break
         reads[line.split()[0][1:]]=[fhr.readline().strip(),fhr.readline().strip(),fhr.readline().strip()]
-        #print(reads[line.split()[0]])
     return reads
 
 
@@ -132,7 +154,10 @@ def trimAdapters(options):
     cmd="trimmomatic SE -threads "+str(options.CPU)+" "+input_filename
     cmd+=" "+output_filename
     cmd+=" ILLUMINACLIP:resources/adapters.fasta:2:30:10 "
+
+    logging.info("Calling Trimmomatic SE with the command: %s", cmd)
     os.system(cmd)
+
     cmd="sed -n '1~4s/^@/>/p;2~4p' "+options.adapter_trimmed_filename+" > "+options.output_directory+"/"+options.input_library.split("/")[-1].split(".")[0]+".fa"
     os.system(cmd)
 
@@ -144,23 +169,27 @@ def consolidateReads(options):
     input_filename=options.adapter_trimmed_filename
     output_filename=options.consolidated_filename
     fhw=open(output_filename,"w")
-    #original_data=readFastqFile(input_filename)
     fhr=open(input_filename,"r")
     data={}
+
     while True:
         line=fhr.readline().strip()
         if not line:
             break
+
         id=line
         seq=fhr.readline().strip()
         useless=fhr.readline()
         quality=fhr.readline()
+
         if seq not in data:
             data[seq]=1
         else:
             data[seq]+=1
+
     for seq_num,seq in enumerate(data):
-        fhw.write(">read_"+str(seq_num+1)+"_"+str(data[seq])+"\n"+seq+"\n")
+        fhw.write(f">read_{str(seq_num+1)}_{str(data[seq])}\n{seq}\n")
+
     fhw.close()
     
 
@@ -176,12 +205,16 @@ def mapSmallRNAReadsToGenomeUsingBowtie1(options):
         cmd+=" --threads "+options.CPU+" "
         cmd+=options.genome+" "
         cmd+=options.output_directory+"/bowtie1_index"
+
+        logging.info("Calling bowtie index with the command: %s", cmd)
         os.system(cmd)
+
         bowtie1_index=options.output_directory+"/bowtie1_index"
+
     else:
         bowtie1_index=options.bowtie_index
         
-    if os.path.exists(bowtie1_index+".1.ebwtl")==False:
+    if not os.path.exists(bowtie1_index+".1.ebwtl"):
         large_index=0
     else:
         large_index=1
@@ -196,6 +229,8 @@ def mapSmallRNAReadsToGenomeUsingBowtie1(options):
     cmd+=options.consolidated_filename+" "
     cmd+=" "+options.output_directory+"/"+options.input_filename+"_bowtie1.bwt "
     cmd+=" 2> "+options.output_directory+"/"+options.input_filename+"_bowtie1.alignment "
+
+    logging.info("Calling bowtie alignment with the command: %s", cmd)
     os.system(cmd)
 
 
@@ -205,21 +240,22 @@ def readMappedData(options,phase):
     """
     whole_mapped_data={}
     mapped_data_per_size_per_register={}
-    alignment_filename=options.output_directory+"/"+options.input_filename+"_bowtie1.bwt"
+    alignment_filename = f"{options.output_directory}/{options.input_filename}_bowtie1.bwt"
     fhr=open(alignment_filename,"r")
+
     for line in fhr:
         try:
             read_id, strand, chromosome, coordinate, sequence, quality, mapped_times = line.strip().split()
         except ValueError:
-            print(line)
             continue
+
         try:
             coordinate=int(coordinate)
             mapped_times=int(mapped_times)+1
             length=len(sequence)
         except ValueError:
-            print(line)
             continue
+
         if strand=="-":
             coordinate+=2
         if chromosome not in whole_mapped_data:
@@ -239,7 +275,7 @@ def readMappedData(options,phase):
             mapped_data_per_size_per_register[chromosome][register][coordinate]=0
         mapped_data_per_size_per_register[chromosome][register][coordinate]+=1
         if mapped_data_per_size_per_register[chromosome][register][coordinate]>2:
-            print("Trouble with alignments",length,chromosome,register,coordinate)
+            logging.warning("Trouble with alignments: %s %s %s %s",length,chromosome,register,coordinate)
                 
     return whole_mapped_data,mapped_data_per_size_per_register
 
@@ -252,6 +288,7 @@ def siftRegionsOfInterest(options,mapped_data_per_size_per_register,phase,cycle)
         # Make separate files for each chromosome
         output_filename=options.output_directory_per_run+"/"+options.input_filename+"_"+str(phase)+"_"+str(cycle)+"_"+chromosome+".regionsOfInterest.full"
         fhw=open(output_filename,"w")
+
         for register in sorted(mapped_data_per_size_per_register[chromosome]):
             start,end=0,0
             for coordinate in sorted(mapped_data_per_size_per_register[chromosome][register]):
@@ -271,6 +308,7 @@ def siftRegionsOfInterest(options,mapped_data_per_size_per_register,phase,cycle)
                         start=coordinate
             if end!=0:
                 fhw.write(str(register)+"\t"+str(start)+"\t"+str(end+phase-1)+"\n")
+
         fhw.close()
 
 
@@ -303,9 +341,10 @@ def parseGFF(gff_path):
 
 def filterByRegion(options, mapped_data_per_size_per_register, phase, cycle):
     if options.regions_file:
-        print(f"Regions file GFF option provided: {options.regions_file}")
+        logging.info("Regions file GFF option provided: %s", options.regions_file)
         gff_data = parseGFF(options.regions_file)
         fail_count = 0
+
         # filter files based off chromosome
         for chromosome in sorted(mapped_data_per_size_per_register):
             if chromosome in gff_data.keys():
@@ -328,18 +367,18 @@ def filterByRegion(options, mapped_data_per_size_per_register, phase, cycle):
                         for line in data:
                             file.write(line)
                 else:
-                    print(f"Chromosome {chromosome} has no regions which made it through the filtering.")
+                    logging.warning("Chromosome %s has no regions which made it through the filtering.", chromosome)
                     fail_count += 1
             
             else:
                 # add to fail count
-                print(f"Chromosome {chromosome} not in regions file and has been filtered out.")
+                logging.warning("Chromosome %s not in regions file and has been filtered out.", chromosome)
                 fail_count += 1
 
         if fail_count == len(mapped_data_per_size_per_register):
             # capture for if filtering removes all regions
-            print("No regions survived filtering based on gff regions inputted.")
-            print("The program had to terminate prematurely....Please check "+options.output_directory+"/Log.out file for more details")
+            logging.error("No regions survived filtering based on gff regions inputted.")
+            print("The program had to terminate prematurely....Please check log file for more details.")
             sys.exit()
 
     else:
@@ -373,36 +412,35 @@ def computePValues(options,whole_mapped_data,mapped_data_per_size_per_register,p
             end=int(end)
             
             begin=start
-            #print(chromosome,register,start,end)
             sys.stdout.flush()
             while begin+(phase*min_reads_mapped_to_a_phased_register) <= end+1:
                 finish=begin+(phase*cycle)-1
-                
+                num_all_reads=0
                 k=0
+                n=0
+                m=cycle*2
+                pvalue=0
+
                 for i in range(begin,finish+1):
-                    #print(chromosome,register,i,phase,start,end)
                     try:
                         k+=mapped_data_per_size_per_register[chromosome][register][i]
                     except KeyError:
                         pass
-                #print("Next")
+
                 if k<min_reads_mapped_to_a_phased_register: 
                     begin+=phase
                     continue
                 
-                num_all_reads=0
                 for i in range(begin,finish+1):
                     try:
                         num_all_reads+=whole_mapped_data[chromosome][i]
                     except KeyError:
                         pass
+
                 if num_all_reads<min_reads_in_a_window:
                     begin+=phase
                     continue
-                
-                n=0
-                """print("reached here")
-                sys.stdout.flush()"""
+
                 # register_i is an iterator different from register
                 for register_i in sorted(mapped_data_per_size_per_register[chromosome]):
                     for i in range(begin,finish+1):
@@ -410,22 +448,21 @@ def computePValues(options,whole_mapped_data,mapped_data_per_size_per_register,p
                             n+=mapped_data_per_size_per_register[chromosome][register_i][i]
                         except KeyError:
                             pass
-                """if chromosome=="Chr1":
-                    print(str(n)+" "+str(num_all_reads)+"\n")"""
+
                 if n/num_all_reads<0.3:
                     begin+=phase
                     continue
-                m=cycle*2
-                pvalue=0
+
                 for x in range(k,m+1):
                     numerator=nCr((phase-1)*m,n-x)*nCr(m,x)
                     pvalue+=numerator
                 denominator=nCr(phase*m,n)
                 pvalue=pvalue/denominator
-                #print(chromosome,begin,finish,k,n,m,num_all_reads,pvalue,n/num_all_reads)
+
                 if pvalue>=options.pvalue_cutoff:
                     begin+=phase
                     continue
+
                 stuffs_to_be_printed_to_file=[register,begin,finish,k,n,m,num_all_reads,n/num_all_reads,pvalue]
                 fhw.write("\t".join(map(str,stuffs_to_be_printed_to_file))+"\n")
                 sys.stdout.flush()
@@ -438,18 +475,21 @@ def generatePositivePHASLoci(options,whole_mapped_data,phase,cycle):
     """
     out_filename=options.output_directory_per_run+"/"+options.input_filename+"_"+str(phase)+"_"+str(cycle)+".positive_phase_loci"
     fhw=open(out_filename,"w")
+
     for chromosome in sorted(whole_mapped_data):
         filename=options.output_directory_per_run+"/"+options.input_filename+"_"+str(phase)+"_"+str(cycle)+"_"+chromosome+".regionsOfInterest.concentrated"
+        flag_reg=1000
+        window_start=0
+        window_end=0
+
         try:
             fhr=open(filename,"r")
         except FileNotFoundError:
             continue
-        flag_reg=1000
-        window_start,window_end=0,0
+
         for line in fhr:
-            """pvalue=float(line.strip().split()[-1])
-            if pvalue>=options.pvalue_cutoff:continue"""
             register,start,end=map(int,line.strip().split()[:3])
+
             if register==flag_reg:
                 if window_end>start:
                     window_end=end
@@ -457,12 +497,14 @@ def generatePositivePHASLoci(options,whole_mapped_data,phase,cycle):
                     fhw.write(chromosome+"\t"+str(window_start)+"\t"+str(window_end)+"\n")
                     window_start=start
                     window_end=end
+
             else:
                 if flag_reg!=1000:
                     fhw.write(chromosome+"\t"+str(window_start)+"\t"+str(window_end)+"\n")
                 window_start=start
                 window_end=end
                 flag_reg=register
+
         fhr.close()
         fhw.write(chromosome+"\t"+str(window_start)+"\t"+str(window_end)+"\n")
     fhw.close()
@@ -476,9 +518,11 @@ def readFastaFile(filename):
     """
     info={}
     fhr=open(filename,"r")
+
     while(True):
         line=fhr.readline()
         if not line: break
+
         if(">" in line):
             try:
                 info[line.strip()[1:].split()[0]]=fhr.readline().strip()
@@ -496,18 +540,23 @@ def readDataForPhasingScoreComputation(options,phase):
     score={}
     readcount={}
     readseq={}
+
     for line in fhr:
         read_id, strand, chromosome, coordinate, alignment, quality, mapped_times = line.strip().split()
         coordinate=int(coordinate)
         mapped_times=int(mapped_times)+1
         length=len(alignment)
+
         if length!=phase:
             continue
+
         if strand=='-':
             coordinate+=2
             seq=str(Seq(alignment).reverse_complement())
+
         else:
             seq=alignment
+
         if 'x' in read_id.split("_")[-1]:
             count=int(read_id.split("_")[-1][1:])
         else:
@@ -525,7 +574,6 @@ def readDataForPhasingScoreComputation(options,phase):
             readcount[chromosome][coordinate]={}
         if strand not in readcount[chromosome][coordinate]:
             readcount[chromosome][coordinate][strand]=count
-            
         if chromosome not in readseq:
             readseq[chromosome]={}
         if coordinate not in readseq[chromosome]:
@@ -545,16 +593,17 @@ def generatePhasingScore(options,phase,cycle):
     final_phase_loci=options.output_directory_per_run+"/"+options.input_filename+"_"+str(phase)+"_"+str(cycle)+".phasing_score_phase_loci"
     fhr=open(phased_loci_filename,"r")
     out4=open(final_phase_loci,"w")
+
     for line in fhr:
         chromosome,ss,ee=line.strip().split()
         ss=int(ss)
         ee=int(ee)
-        #correct=list(range(ss,ee+1,phase))
         phasing_score_filename=options.output_directory_per_run+"/"+str(phase)+"_"+str(chromosome)+"_"+str(ss)+"_"+str(ee)+".phasing_score"
         abundance_score_filename=options.output_directory_per_run+"/"+str(phase)+"_"+str(chromosome)+"_"+str(ss)+"_"+str(ee)+".abundance"
         out=open(phasing_score_filename,"w")
         out2=open(abundance_score_filename,"w")
         score_count={}
+
         for site in range(ss,ee+1):
             start=site-(phase*4)
             end=site+(phase*5)-1
@@ -569,6 +618,7 @@ def generatePhasingScore(options,phase,cycle):
             all_scores-=max_within_count
             P,k=0,0
             s=start
+
             while s<end:
                 if s not in score[chromosome]:
                     s+=phase
@@ -581,16 +631,14 @@ def generatePhasingScore(options,phase,cycle):
                 s+=phase
             U=all_scores-P
             
-            #if U<0: continue
             if k>=3:
-                #print(P,U,k)
                 phas_score=math.log((1+(10*(P/(1+U))))**(k-2))
-                """if phas_score>max and site in correct:
-                    max=phas_score"""
             else:
                 phas_score=0
+
             out.write(str(site)+"\t"+str(phas_score)+"\n")
             out4.write(chromosome+"\t"+str(site)+"\t"+str(phas_score)+"\n")
+
             if chromosome not in score_count:
                 score_count[chromosome]={}
             if site not in score_count[chromosome]:
@@ -599,10 +647,9 @@ def generatePhasingScore(options,phase,cycle):
                 out2.write(str(site)+"\t"+str(readcount[chromosome][site]['+'])+"\n")
             if site in readcount[chromosome] and '-' in readcount[chromosome][site] and readcount[chromosome][site]['-']!=0:
                 out2.write(str(site)+"\t-"+str(readcount[chromosome][site]['-'])+"\n")
+
         out.close()
         out2.close()
-        
-        #out4.write(chromosome+"\t"+str(ss)+"\t"+str(ee)+"\t"+str(phas_score)+"\n")
     out4.close()   
             
 
@@ -618,61 +665,70 @@ def cleanUpTemporaryFiles(options):
 
 
 def main():
+    create_logs()
+
     commandLineArg=sys.argv
     if len(commandLineArg)==1:
         print("Please use the --help option to get usage information")
-    options=parseCommandLineArguments()
-    print("args parsed")
-    options=analyzeCommandLineArguments(options)
-    print("args analysed")
 
+    logging.info("Parsing arguments...")
+    options = parseCommandLineArguments()
+    logging.info("Arguments passed: %s", options)
+
+    logging.info("Checking arguments...")
+    options = analyzeCommandLineArguments(options)
+    logging.info("Checked arguments: %s", options)
+
+    logging.info("Trimming adapters...")
     trimAdapters(options)
-    print("adapters trimmed")
 
+    logging.info("Consolidating fastq reads...")
     consolidateReads(options)
-    print("consolidated reads")
 
+    logging.info("Mapping reads to genome using bowtie...")
     mapSmallRNAReadsToGenomeUsingBowtie1(options)
-    print("mapped reads using ")
 
     for phase in options.small_rna_size:
 
+        logging.info("Reading mapped data for phase length %s...", phase)
         whole_mapped_data,mapped_data_per_size_per_register=readMappedData(options,phase)
-        print("mapped data read")
 
         for cycle in options.number_of_cycles:
             options.output_directory_per_run=options.output_directory+"/"+"phase_"+str(phase)+"_cycle_"+str(cycle)
             cmd="mkdir "+ options.output_directory_per_run
             os.system(cmd)
 
+            logging.info("Sifting regions of interest...")
             siftRegionsOfInterest(options,mapped_data_per_size_per_register,phase,cycle)
-            print("sifted")
 
+            logging.info("Filtering results by region")
             filterByRegion(options,mapped_data_per_size_per_register, phase, cycle)
-            print("filtered")
 
+            logging.info("Calculating p values...")
             computePValues(options,whole_mapped_data,mapped_data_per_size_per_register,phase,cycle)
-            print("pvalues computed")
 
+            logging.info("Generating phased loci...")
             generatePositivePHASLoci(options,whole_mapped_data,phase,cycle)
-            print("generated positive loci")
 
+            logging.info("Generating phasing scores...")
             generatePhasingScore(options,phase,cycle)
-            print("generate phasing score")
 
+            logging.info("Creating plots...")
             cmd="Rscript --vanilla plot.R "
             cmd+=" "+options.output_directory_per_run
             cmd+=" "+str(phase)
             cmd+=" "+str(cycle)
+            logging.info("Calling Rscript plot.R with the command: %s", cmd)
             os.system(cmd)
-            print("done Rscript")
 
             if options.clean_up!=0:
+                logging.info("Clean up prompted, removing temporary files...")
                 cleanUpTemporaryFiles(options)
     
 
 if __name__ == "__main__":
     main()
+    logging.info("Script complete!")
     
     
     
