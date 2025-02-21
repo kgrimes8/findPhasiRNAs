@@ -9,6 +9,7 @@
 
 import argparse
 import logging
+import subprocess
 import sys
 import os
 import math
@@ -22,7 +23,7 @@ def create_logs():
     except:
         pass
 
-    timenow = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    timenow = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
     log_filepath = f"logs/{timenow}_findphasi.log"
 
     # initiate logging
@@ -35,6 +36,7 @@ def create_logs():
 
     logging.info("Logging initiated.")
     print(f"Logging initiated: {log_filepath}")
+    return log_filepath
 
 
 
@@ -145,7 +147,7 @@ def readFastqFile(filename):
     return reads
 
 
-def trimAdapters(options):
+def trimAdapters(options, log_filepath):
     """
     Trim adapters from sequence
     """
@@ -156,7 +158,10 @@ def trimAdapters(options):
     cmd+=" ILLUMINACLIP:resources/adapters.fasta:2:30:10 "
 
     logging.info("Calling Trimmomatic SE with the command: %s", cmd)
-    os.system(cmd)
+    result = subprocess.run([cmd], shell=True, capture_output=True, text=True, check=True)
+    logging.info("Trimmomatic SE stdout:\n %s", result.stdout)
+    if result.stderr:
+        logging.warning("Trimmomatic SE stderr:\n %s", result.stderr)
 
     cmd="sed -n '1~4s/^@/>/p;2~4p' "+options.adapter_trimmed_filename+" > "+options.output_directory+"/"+options.input_library.split("/")[-1].split(".")[0]+".fa"
     os.system(cmd)
@@ -207,7 +212,10 @@ def mapSmallRNAReadsToGenomeUsingBowtie1(options):
         cmd+=options.output_directory+"/bowtie1_index"
 
         logging.info("Calling bowtie index with the command: %s", cmd)
-        os.system(cmd)
+        result = subprocess.run([cmd], shell=True, capture_output=True, text=True, check=True)
+        logging.info("Bowtie index stdout:\n %s", result.stdout)
+        if result.stderr:
+            logging.warning("Bowtie index stderr:\n %s", result.stderr)
 
         bowtie1_index=options.output_directory+"/bowtie1_index"
 
@@ -231,7 +239,10 @@ def mapSmallRNAReadsToGenomeUsingBowtie1(options):
     cmd+=" 2> "+options.output_directory+"/"+options.input_filename+"_bowtie1.alignment "
 
     logging.info("Calling bowtie alignment with the command: %s", cmd)
-    os.system(cmd)
+    result = subprocess.run([cmd], shell=True, capture_output=True, text=True, check=True)
+    logging.info("Bowtie alignment stdout:\n %s", result.stdout)
+    if result.stderr:
+        logging.warning("Bowtie alignment stderr:\n %s", result.stderr)
 
 
 def readMappedData(options,phase):
@@ -665,7 +676,7 @@ def cleanUpTemporaryFiles(options):
 
 
 def main():
-    create_logs()
+    log_filepath = create_logs()
 
     commandLineArg=sys.argv
     if len(commandLineArg)==1:
@@ -680,7 +691,7 @@ def main():
     logging.info("Checked arguments: %s", options)
 
     logging.info("Trimming adapters...")
-    trimAdapters(options)
+    trimAdapters(options, log_filepath)
 
     logging.info("Consolidating fastq reads...")
     consolidateReads(options)
@@ -719,7 +730,10 @@ def main():
             cmd+=" "+str(phase)
             cmd+=" "+str(cycle)
             logging.info("Calling Rscript plot.R with the command: %s", cmd)
-            os.system(cmd)
+            result = subprocess.run([cmd], shell=True, capture_output=True, text=True, check=True)
+            logging.info("R script stdout:\n %s", result.stdout)
+            if result.stderr:
+                logging.warning("R script stderr:\n %s", result.stderr)
 
             if options.clean_up!=0:
                 logging.info("Clean up prompted, removing temporary files...")
