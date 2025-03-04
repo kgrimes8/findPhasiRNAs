@@ -414,8 +414,12 @@ def computePValues(options,whole_mapped_data,mapped_data_per_size_per_register,p
     chromosome_hits=[]
     for chromosome in sorted(mapped_data_per_size_per_register):
         chromosome_hits.append(chromosome)
-        fhr=open(options.output_directory_per_run+"/"+options.input_filename+"_"+str(phase)+"_"+str(cycle)+"_"+chromosome+".regionsOfInterest","r")
-        fhw=open(options.output_directory_per_run+"/"+options.input_filename+"_"+str(phase)+"_"+str(cycle)+"_"+chromosome+".regionsOfInterest.concentrated","w")
+        try:
+            fhr=open(options.output_directory_per_run+"/"+options.input_filename+"_"+str(phase)+"_"+str(cycle)+"_"+chromosome+".regionsOfInterest","r")
+            fhw=open(options.output_directory_per_run+"/"+options.input_filename+"_"+str(phase)+"_"+str(cycle)+"_"+chromosome+".regionsOfInterest.concentrated","w")
+        except FileNotFoundError:
+            # filter by gff removes some files so if you can't identify them then move onto the next chromosome
+            continue
         for line in fhr:
             register,start,end=line.strip().split()
             register=int(register)
