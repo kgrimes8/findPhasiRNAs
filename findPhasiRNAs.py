@@ -251,6 +251,8 @@ def readMappedData(options,phase):
     """
     whole_mapped_data={}
     mapped_data_per_size_per_register={}
+    score={}
+    readcount={}
     alignment_filename = f"{options.output_directory}/{options.input_filename}_bowtie1.bwt"
     fhr=open(alignment_filename,"r")
 
@@ -269,6 +271,7 @@ def readMappedData(options,phase):
 
         if strand=="-":
             coordinate+=2
+            
         if chromosome not in whole_mapped_data:
             whole_mapped_data[chromosome]={}
         if coordinate not in whole_mapped_data[chromosome]: 
@@ -287,8 +290,26 @@ def readMappedData(options,phase):
         mapped_data_per_size_per_register[chromosome][register][coordinate]+=1
         if mapped_data_per_size_per_register[chromosome][register][coordinate]>2:
             logging.warning("Trouble with alignments: %s %s %s %s",length,chromosome,register,coordinate)
-                
-    return whole_mapped_data,mapped_data_per_size_per_register
+        
+        if 'x' in read_id.split("_")[-1]:
+            count=int(read_id.split("_")[-1][1:])
+        else:
+            count=int(read_id.split("_")[-1])
+        
+        if chromosome not in score:
+            score[chromosome]={}
+        if coordinate not in score[chromosome]:
+            score[chromosome][coordinate]=0
+        score[chromosome][coordinate]+=count
+        
+        if chromosome not in readcount:
+            readcount[chromosome]={}
+        if coordinate not in readcount[chromosome]:
+            readcount[chromosome][coordinate]={}
+        if strand not in readcount[chromosome][coordinate]:
+            readcount[chromosome][coordinate][strand]=count
+
+    return whole_mapped_data, mapped_data_per_size_per_register, score, readcount
 
 
 def siftRegionsOfInterest(options,mapped_data_per_size_per_register,phase,cycle):
@@ -370,7 +391,8 @@ def filterByRegion(options, mapped_data_per_size_per_register, phase, cycle):
                         for region in gff_data[chromosome]:
                             # gff start is before ROI end, and gff end is after ROI start
                             if region["start"] <= line_data[2] and region["end"] >= line_data[1]:
-                                data.append(line)    
+                                if line not in data:
+                                    data.append(line)    
 
                 if data:
                     # write data to new file ROI
@@ -546,64 +568,64 @@ def readFastaFile(filename):
     return info
 
 
-def readDataForPhasingScoreComputation(options,phase):
-    """
-    Read in data from the orginal fasta file for phasing score computation
-    """
-    filename=options.output_directory+"/"+options.input_filename+"_bowtie1.bwt"
-    fhr=open(filename,"r")
-    score={}
-    readcount={}
-    readseq={}
+# def readDataForPhasingScoreComputation(options,phase):
+#     """
+#     Read in data from the orginal fasta file for phasing score computation
+#     """
+#     filename=options.output_directory+"/"+options.input_filename+"_bowtie1.bwt"
+#     fhr=open(filename,"r")
+#     score={}
+#     readcount={}
+#     readseq={}
 
-    for line in fhr:
-        read_id, strand, chromosome, coordinate, alignment, quality, mapped_times = line.strip().split()
-        coordinate=int(coordinate)
-        mapped_times=int(mapped_times)+1
-        length=len(alignment)
+#     for line in fhr:
+#         read_id, strand, chromosome, coordinate, alignment, quality, mapped_times = line.strip().split()
+#         coordinate=int(coordinate)
+#         mapped_times=int(mapped_times)+1
+#         length=len(alignment)
 
-        if length!=phase:
-            continue
+#         if length!=phase:
+#             continue
 
-        if strand=='-':
-            coordinate+=2
-            seq=str(Seq(alignment).reverse_complement())
+#         if strand=='-':
+#             coordinate+=2
+#             # seq=str(Seq(alignment).reverse_complement())
 
-        else:
-            seq=alignment
+#         else:
+#             seq=alignment
 
-        if 'x' in read_id.split("_")[-1]:
-            count=int(read_id.split("_")[-1][1:])
-        else:
-            count=int(read_id.split("_")[-1])
+#         if 'x' in read_id.split("_")[-1]:
+#             count=int(read_id.split("_")[-1][1:])
+#         else:
+#             count=int(read_id.split("_")[-1])
         
-        if chromosome not in score:
-            score[chromosome]={}
-        if coordinate not in score[chromosome]:
-            score[chromosome][coordinate]=0
-        score[chromosome][coordinate]+=count
+#         if chromosome not in score:
+#             score[chromosome]={}
+#         if coordinate not in score[chromosome]:
+#             score[chromosome][coordinate]=0
+#         score[chromosome][coordinate]+=count
         
-        if chromosome not in readcount:
-            readcount[chromosome]={}
-        if coordinate not in readcount[chromosome]:
-            readcount[chromosome][coordinate]={}
-        if strand not in readcount[chromosome][coordinate]:
-            readcount[chromosome][coordinate][strand]=count
-        if chromosome not in readseq:
-            readseq[chromosome]={}
-        if coordinate not in readseq[chromosome]:
-            readseq[chromosome][coordinate]={}
-        if strand not in readseq[chromosome][coordinate]:
-            readseq[chromosome][coordinate][strand]=seq
+#         if chromosome not in readcount:
+#             readcount[chromosome]={}
+#         if coordinate not in readcount[chromosome]:
+#             readcount[chromosome][coordinate]={}
+#         if strand not in readcount[chromosome][coordinate]:
+#             readcount[chromosome][coordinate][strand]=count
+#         if chromosome not in readseq:
+#             readseq[chromosome]={}
+#         if coordinate not in readseq[chromosome]:
+#             readseq[chromosome][coordinate]={}
+#         if strand not in readseq[chromosome][coordinate]:
+#             readseq[chromosome][coordinate][strand]=seq
             
-    return score,readcount,readseq
+#     return score,readcount,readseq
         
 
-def generatePhasingScore(options,phase,cycle):
+def generatePhasingScore(options, phase, cycle, score, readcount):
     """
     Generates phasing scores for the phased loci
     """
-    score,readcount,readseq=readDataForPhasingScoreComputation(options,phase)
+    # score,readcount,readseq=readDataForPhasingScoreComputation(options,phase)
     phased_loci_filename=options.output_directory_per_run+"/"+options.input_filename+"_"+str(phase)+"_"+str(cycle)+".positive_phase_loci"
     final_phase_loci=options.output_directory_per_run+"/"+options.input_filename+"_"+str(phase)+"_"+str(cycle)+".phasing_score_phase_loci"
     fhr=open(phased_loci_filename,"r")
@@ -706,7 +728,7 @@ def main():
     for phase in options.small_rna_size:
 
         logging.info("Reading mapped data for phase length %s...", phase)
-        whole_mapped_data,mapped_data_per_size_per_register=readMappedData(options,phase)
+        whole_mapped_data, mapped_data_per_size_per_register, score_dict, readcount_dict = readMappedData(options,phase)
 
         for cycle in options.number_of_cycles:
             options.output_directory_per_run=options.output_directory+"/"+"phase_"+str(phase)+"_cycle_"+str(cycle)
@@ -726,7 +748,7 @@ def main():
             generatePositivePHASLoci(options,whole_mapped_data,phase,cycle)
 
             logging.info("Generating phasing scores...")
-            generatePhasingScore(options,phase,cycle)
+            generatePhasingScore(options, phase, cycle, score_dict, readcount_dict)
 
             logging.info("Creating plots...")
             cmd="Rscript --vanilla plot.R "
