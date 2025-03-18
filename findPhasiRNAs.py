@@ -253,6 +253,7 @@ def readMappedData(options,phase):
     mapped_data_per_size_per_register={}
     score={}
     readcount={}
+    # readseq={}
     alignment_filename = f"{options.output_directory}/{options.input_filename}_bowtie1.bwt"
     fhr=open(alignment_filename,"r")
 
@@ -271,6 +272,9 @@ def readMappedData(options,phase):
 
         if strand=="-":
             coordinate+=2
+            # seq=str(Seq(sequence).reverse_complement())
+        # else:
+        #     seq=sequence
             
         if chromosome not in whole_mapped_data:
             whole_mapped_data[chromosome]={}
@@ -308,6 +312,13 @@ def readMappedData(options,phase):
             readcount[chromosome][coordinate]={}
         if strand not in readcount[chromosome][coordinate]:
             readcount[chromosome][coordinate][strand]=count
+
+#         if chromosome not in readseq:
+#             readseq[chromosome]={}
+#         if coordinate not in readseq[chromosome]:
+#             readseq[chromosome][coordinate]={}
+#         if strand not in readseq[chromosome][coordinate]:
+#             readseq[chromosome][coordinate][strand]=seq
 
     return whole_mapped_data, mapped_data_per_size_per_register, score, readcount
 
@@ -566,59 +577,6 @@ def readFastaFile(filename):
             except ValueError:
                 pass
     return info
-
-
-# def readDataForPhasingScoreComputation(options,phase):
-#     """
-#     Read in data from the orginal fasta file for phasing score computation
-#     """
-#     filename=options.output_directory+"/"+options.input_filename+"_bowtie1.bwt"
-#     fhr=open(filename,"r")
-#     score={}
-#     readcount={}
-#     readseq={}
-
-#     for line in fhr:
-#         read_id, strand, chromosome, coordinate, alignment, quality, mapped_times = line.strip().split()
-#         coordinate=int(coordinate)
-#         mapped_times=int(mapped_times)+1
-#         length=len(alignment)
-
-#         if length!=phase:
-#             continue
-
-#         if strand=='-':
-#             coordinate+=2
-#             # seq=str(Seq(alignment).reverse_complement())
-
-#         else:
-#             seq=alignment
-
-#         if 'x' in read_id.split("_")[-1]:
-#             count=int(read_id.split("_")[-1][1:])
-#         else:
-#             count=int(read_id.split("_")[-1])
-        
-#         if chromosome not in score:
-#             score[chromosome]={}
-#         if coordinate not in score[chromosome]:
-#             score[chromosome][coordinate]=0
-#         score[chromosome][coordinate]+=count
-        
-#         if chromosome not in readcount:
-#             readcount[chromosome]={}
-#         if coordinate not in readcount[chromosome]:
-#             readcount[chromosome][coordinate]={}
-#         if strand not in readcount[chromosome][coordinate]:
-#             readcount[chromosome][coordinate][strand]=count
-#         if chromosome not in readseq:
-#             readseq[chromosome]={}
-#         if coordinate not in readseq[chromosome]:
-#             readseq[chromosome][coordinate]={}
-#         if strand not in readseq[chromosome][coordinate]:
-#             readseq[chromosome][coordinate][strand]=seq
-            
-#     return score,readcount,readseq
         
 
 def generatePhasingScore(options, phase, cycle, score, readcount):
