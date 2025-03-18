@@ -709,6 +709,9 @@ def main():
             generatePhasingScore(options, phase, cycle, score_dict, readcount_dict)
 
             logging.info("Creating plots...")
+            cmd=f"mkdir -p {options.output_directory}/plots"
+            os.system(cmd)
+
             cmd="Rscript --vanilla plot.R "
             cmd+=" "+options.output_directory_per_run
             cmd+=" "+str(phase)
