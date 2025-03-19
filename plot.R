@@ -43,10 +43,14 @@ for(file_num in seq(1:length(phasing_score_files)))
 	print(abundance_file)
 	print(colour_string)
 	
-	
-	score<-read.table(phasing_score_file,head=F,sep='\t')
+	skip_to_next <- FALSE
+	tryCatch(score<-read.table(phasing_score_file,head=F,sep='\t'), error = function(e) { skip_to_next <<- TRUE})
+	tryCatch(abundance<-read.table(abundance_file,head=F,sep='\t'), error = function(e) { skip_to_next <<- TRUE})
+	if(skip_to_next) { next }
+
+	# score<-read.table(phasing_score_file,head=F,sep='\t')
 	names(score)<-c('coordinate','score');
-	abundance<-read.table(abundance_file,head=F,sep='\t')
+	# abundance<-read.table(abundance_file,head=F,sep='\t')
 	names(abundance)<-c('coordinate','abundance');
 	
 	p1<-ggplot(score,aes(x=coordinate,y=score))+
@@ -64,14 +68,17 @@ for(file_num in seq(1:length(phasing_score_files)))
 			theme(plot.title = element_text(hjust=0.5,face="bold"),
 					plot.subtitle = element_text(hjust=0.5));
 	
-	graph_list[[i]]<-p1
-	graph_list[[i+1]]<-p2
-	#multiplot(p1,p2)
-	#dev.off()
-	i<-i+2
+	ggsave(paste0(output_directory,"/plots/",chromosome,"_",toString(start),"_",toString(end),"_score.png"),p1, width=8.5)
+	ggsave(paste0(output_directory,"/plots/",chromosome,"_",toString(start),"_",toString(end),"_abundance.png"),p2, width=8.5)
+
+# 	graph_list[[i]]<-p1
+# 	graph_list[[i+1]]<-p2
+# 	#multiplot(p1,p2)
+# 	#dev.off()
+# 	i<-i+2
 }
 
-multi_plot <- marrangeGrob(grobs=graph_list, nrow=1, ncol=1,top=NULL)
-ggsave(paste0(output_directory,"/","plots","_phase_",phase_cmdline,"_cycle_",cycle,".pdf"), multi_plot, width=8.5)
+# multi_plot <- marrangeGrob(grobs=graph_list, nrow=1, ncol=1,top=NULL)
+# ggsave(paste0(output_directory,"/","plots","/","phase_",phase_cmdline,"_cycle_",cycle,".pdf"), multi_plot, width=8.5)
 
 
