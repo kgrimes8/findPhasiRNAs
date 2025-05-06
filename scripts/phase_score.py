@@ -1,12 +1,4 @@
 """
-Data input example:
-        read_12124_6138 +       chr05   3810329 TTGAGCAAGAAAGTCAGAGTT   IIIIIIIIIIIIIIIIIIIII   0
-        read_3307062_86 +       chr05   3810329 TTGAGCAAGAAAGTCAGAGTTAGT        IIIIIIIIIIIIIIIIIIIIIIII        0
-        read_4610579_11 -       chr05   3810328 TTTGAGCAAGAAAGTCAGAGTT  IIIIIIIIIIIIIIIIIIIIII  0
-        read_6964633_31 +       chr05   3810329 TTGAGCAAGAAAGTCAGAGTTA  IIIIIIIIIIIIIIIIIIIIII  0
-        read_7421569_42 +       chr05   3810329 TTGAGCAAGAAAGTCAGAGTTAG IIIIIIIIIIIIIIIIIIIIIII 0
-
-
 # Computes the P-values using a Hypergeometric distribution
 M = total number of de-duped reads (coordinates) in the fastq that is phase length (21)
 n = number of de-duped reads that cover the phased window/phasiRNA region (phase length 21)
@@ -42,7 +34,6 @@ def check_in_region(chr, coord, strand, regions_dict):
     print(chr)
     print(coord)
     print(regions_dict["start"], regions_dict["end"])
-
 
     if chr != regions_dict["chr"]:
         print(f"{chr} not in line")
@@ -128,11 +119,12 @@ def pval_prepare(alignment_file, regions_dict, mirna_length):
     print(pval_data)
     
 
-            
-
+        
+#################################################################
 
 if __name__ == "__main__":
-    alignment_file = "test_bowtie.bwt"
+    mirna_length = 21
+    alignment_file = "resources/test_bowtie.bwt"
     regions_dict = {
         "chr": "chr07",
         "start":2013338,
