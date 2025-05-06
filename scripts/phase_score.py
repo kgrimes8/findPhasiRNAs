@@ -132,32 +132,13 @@ def pval_prepare(alignment_file, regions_dict, mirna_length):
 
 
 if __name__ == "__main__":
-
-    """
-    region:
-    chr05	slyTAS4	tasRNA	3810129	3810580	.	+	.
-
-    trigger:
-    chr05	3810317	3810339	slyTAS4_sly_miR828	0	-
-    cutsite = trigger start +10
-    """
-
-    mirna_length = 21
+    alignment_file = "test_bowtie.bwt"
     regions_dict = {
-        "chr": "chr05",
-        "start":3810129,
-        "end": 3810580,
+        "chr": "chr07",
+        "start":2013338,
+        "end": 2013450,
         "strand": "+",
-        "trigger_cut_site": 3810327
+        "trigger_cut_site": 2013349
     }
-    alignment_file = "/home/kal_grimes_tropic_bio/proj/phasi/findPhasiRNAs/results/wtm82_fastq/wtm82_bowtie1.bwt"
-    # alignment_file = "/home/kal_grimes_tropic_bio/proj/phasi/test_bowtie.bwt"
-    # regions_dict = {
-    #     "chr": "chr07",
-    #     "start":2013338,
-    #     "end": 2013450,
-    #     "strand": "+",
-    #     "trigger_cut_site": 2013349
-    # }
 
     pval_prepare(alignment_file, regions_dict, mirna_length)
