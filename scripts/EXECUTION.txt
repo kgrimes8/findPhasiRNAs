@@ -1,0 +1,44 @@
+Functionality:
+
+1) prep fastq data
+run consolidate_reads.py (trimming and consolidation of fastq files)
+
+2) Alignment
+run align_reads.py (aligns using bowtie)
+
+2) calculate and plot phasing score
+run phased_scoring.py (calculates p-values and phasing score, then plots)
+
+
+sbatch -o slurm_consolidate.stdout -e slurm_consolidate.err -J findphasi -c 4 --mem=64G --wrap "python scripts/consolidate_reads.py" 
+sbatch -o slurm_align.stdout -e slurm_align.err -J findphasi -c 4 --mem=16G --wrap "python scripts/align_reads.py"
+sbatch -o slurm_score.stdout -e slurm_score.err -J findphasi -c 4 --mem=16G --wrap "python scripts/phased_scoring.py"
+
+
+total fastq times:
+- consolidate_reads took ~ 30 minutes, used 30gb memory
+- align reads (data error due to poor trimming)
+- phased_scoring (data error due to poor trimming)
+
+
+single fastq times:
+- consolidate_reads took ~2  minutes, used 700mb memory
+- align reads took ~10  minutes, used 2gb memory
+- phased_scoring took ~ 12 seconds, "0" memory
+
+
+multiple fastq logic:
+- supply list of fastqs
+- each fastq gets read and added to consolidated dict in turn.
+- consolidated dict is named after a "sample group" and this sample group ID is passed to rest of scripts.
+
+multi fastq times (2 fastq loop):
+- consolidate_reads took ~2  minutes, used 1GB memory
+- align reads took ~9  minutes, used 1.6gb memory
+- phased_scoring took ~ 10 seconds, "0" memory
+
+
+all zipped fastq (9 files) from trimmed stage:
+- consolidate_reads took ~15 minutes, used 10GB memory
+- align reads took ~12  minutes, used 1.6gb memory (double cores takes ~half time)
+- phased_scoring took ~ 40 seconds, 1.2gb memory
